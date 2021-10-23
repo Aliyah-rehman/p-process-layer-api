@@ -1,0 +1,25 @@
+{
+  "GPAYBalanceEnquiryRequest": {
+   
+    "GPAYReferenceNumber": "1234567890",
+    "DateTimeStamp": "2018-03-14T08:00:00",
+    "Device": "Android 7.1",
+    "TransactionApiTypee": "BalanceEnquiry",
+    "GPAYBankInfoMessage": [
+      {
+        "GPAYBankInfoRequest": {
+          "BankCode": "SBI",
+          "AccountName": "SAI",
+
+          "AccountNumbers": {
+            "AccountNumber": [
+              {
+                "AccNumber": "A1110000111"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,464 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="c98294cf-b1f1-4ceb-876c-2772c7465dc4" basePath="/api/v1/sbi" >
+		<http:request-connection host="s-system.us-e2.cloudhub.io" />
+	</http:request-config>
+	<http:request-config name="HTTP_Request_configuration_Unionbank" doc:name="HTTP Request configuration" doc:id="207e0bfb-d3f4-4548-b6a1-03a20da5675b" basePath="/api/v1" >
+		<http:request-connection host="s-union-bank.us-e2.cloudhub.io" />
+	</http:request-config>
+	<sub-flow name="p-process-development-implSub_Flow1" doc:id="fd034670-bae2-4ac7-994e-030175c5a416" >
+		<ee:transform doc:name="Transform Message" doc:id="e619003a-279c-4e48-896f-704b575a1762" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="SizeOfBanks" ><![CDATA[
+%dw 2.0
+output application/json
+---
+sizeOf(payload.GPAYBalanceEnquiryRequest.GPAYBankInfoMessage.GPAYBankInfoRequest.BankCode)]]></ee:set-variable>
+				<ee:set-variable variableName="vSbibank" ><![CDATA[%dw 2.0
+output application/json
+---
+{
+GPAYBalanceEnquiryRequest:{
+
+    GPAYReferenceNumber: payload.GPAYBalanceEnquiryRequest.GPAYReferenceNumber,
+    DateTimeStamp:payload.GPAYBalanceEnquiryRequest.DateTimeStamp,
+    Device: payload.GPAYBalanceEnquiryRequest.Device,
+    TransactionApiTypee:payload.GPAYBalanceEnquiryRequest.TransactionApiTypee,
+    GPAYBankInfoMessage: payload.GPAYBalanceEnquiryRequest.GPAYBankInfoMessage
+
+    filter ($.GPAYBankInfoRequest.BankCode == "SBI"
+     )
+}
+
+}]]></ee:set-variable>
+				<ee:set-variable variableName="vUnionBank" ><![CDATA[%dw 2.0
+output application/json
+---
+{
+GPAYBalanceEnquiryRequest:{
+
+    GPAYReferenceNumber: payload.GPAYBalanceEnquiryRequest.GPAYReferenceNumber,
+    DateTimeStamp:payload.GPAYBalanceEnquiryRequest.DateTimeStamp,
+    Device: payload.GPAYBalanceEnquiryRequest.Device,
+    TransactionApiTypee:payload.GPAYBalanceEnquiryRequest.TransactionApiTypee,
+    GPAYBankInfoMessage: payload.GPAYBalanceEnquiryRequest.GPAYBankInfoMessage
+
+    filter ($.GPAYBankInfoRequest.BankCode == "UNIONBANK"
+     )
+}
+
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<choice doc:name="Choice" doc:id="0ecbb9db-65ea-486c-ae22-ac5e71fedaee">
+			<when expression="#[vars.SizeOfBanks &gt; '1']">
+				<scatter-gather doc:name="Scatter-Gather" doc:id="cc7e65a1-c8f2-4a8a-b190-7b097da958fe" >
+					<route >
+						<ee:transform doc:name="Transform Message" doc:id="1d765f73-b7c6-468a-a28f-cb9cd6e11549">
+							<ee:message>
+								<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+vars.vSbibank]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+						<try doc:name="Try" doc:id="0812b01e-b258-4ed1-a110-c8d95bbc1e48" >
+							<flow-ref doc:name="p-process-development-implSub_Flow-sbi-bank" doc:id="b50f6ed2-ceb1-47f6-a5e8-15d0573363ee" name="p-process-development-implSub_Flow-sbi-bank" />
+							<error-handler >
+								<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="268f8cb5-cc5a-44f6-be65-edf62de10cca" >
+									<ee:transform doc:name="Transform Message" doc:id="02c1ac7a-caba-4adf-9b5d-9b503ea6637b" >
+										<ee:message >
+											<ee:set-payload ><![CDATA[{
+    "GPAYBalanceEnquiryResponse": {
+        "GPAYReferenceNumber": "",
+        "DateTimeStamp": now(),
+        "Device": "Android 7.1",
+        "GPAYBEResponseMessage": [
+            {
+                "BankCode": "SBI",
+                "StatusCode": "",
+                "StatusDetail": "",
+                "TotalBal": "0",
+                "GPAYBalanceEnquiryResponse": [
+                    {
+                        "GPAYReceiptTime": "",
+                        "GPAYSequenceNum": "",
+                        "GPAYAccountNumber": "",
+                        "GPAYAccountCurrency": "",
+                        "GPAYAccountType": "",
+                        "GPAYAccountStatusDesc": "",
+                        "GPAYAvailableBalance": "",
+                        "StatusCode": "Failed",
+                        "StatusDetail": error.description,
+                        "GPAYCustomerFullName": ""
+                    }
+                ]
+            }
+        ]
+    }
+}
+
+
+
+]]></ee:set-payload>
+										</ee:message>
+									</ee:transform>
+								</on-error-continue>
+							</error-handler>
+						</try>
+						<logger level="INFO" doc:name="Logger" doc:id="fa845170-4d4c-434b-bf48-022d3586d306" />
+					</route>
+					<route >
+						<ee:transform doc:name="Transform Message" doc:id="8968b1b9-f720-4725-88ea-3f0728c22a69">
+							<ee:message>
+								<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+vars.vUnionBank]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+						<try doc:name="Try" doc:id="c4a962dc-b822-46fb-a9b4-1dd73ff71d18" >
+							<flow-ref doc:name="p-process-development-implSub_Flow-unionbank" doc:id="5d0604d1-a005-4cc7-9e8e-cd3390dca08e" name="p-process-development-implSub_Flow-unionbank" />
+							<error-handler >
+								<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="3604b721-25a0-4f85-9658-303648bac207" >
+									<ee:transform doc:name="Transform Message" doc:id="f1b7fd6a-af7e-4dd0-af15-657661d0a33f" >
+										<ee:message >
+											<ee:set-payload ><![CDATA[{
+    "GPAYBalanceEnquiryResponse": {
+        "GPAYReferenceNumber": "",
+        "DateTimeStamp": now(),
+        "Device": "Android 7.1",
+        "GPAYBEResponseMessage": [
+            {
+                "BankCode": "UNIONBANK",
+                "StatusCode": "",
+                "StatusDetail": "",
+                "TotalBal": "0",
+                "GPAYBalanceEnquiryResponse": [
+                    {
+                        "GPAYReceiptTime": "",
+                        "GPAYSequenceNum": "",
+                        "GPAYAccountNumber": "",
+                        "GPAYAccountCurrency": "",
+                        "GPAYAccountType": "",
+                        "GPAYAccountStatusDesc": "",
+                        "GPAYAvailableBalance": "",
+                        "StatusCode": "Failed",
+                        "StatusDetail": error.description,
+                        "GPAYCustomerFullName": ""
+                    }
+                ]
+            }
+        ]
+    }
+}
+
+
+
+]]></ee:set-payload>
+										</ee:message>
+									</ee:transform>
+								</on-error-continue>
+							</error-handler>
+						</try>
+						<logger level="INFO" doc:name="Logger" doc:id="538f332f-6083-4c92-baf2-96ac4768aade" />
+					</route>
+				</scatter-gather>
+				<ee:transform doc:name="Transform Message" doc:id="6f9b1fbf-e93f-4974-8c2b-8ebc2a55d82b" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+flatten(payload..payload)]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<ee:transform doc:name="Transform Message" doc:id="f4b97746-e4d7-4a3b-aeb7-3e3f99616f6f" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+GPAYBalanceEnquiryResponse:{
+
+
+GPAYBEoneResponseMessage: payload map (val,index)-> {
+
+GPAYBEResponseMessage: val.GPAYBalanceEnquiryResponse.GPAYBEResponseMessage map {
+
+
+BankCode: $.BankCode,
+StatusCode: $.StatusCode,
+StatusDetail: $.StatusDetail,
+TotalBal: $.TotalBal,
+GPAYBalanceEnquiryResponse : $.GPAYBalanceEnquiryResponse
+
+}
+
+}
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<ee:transform doc:name="Transform Message" doc:id="f8ebb2fe-aa59-4ed8-9822-31b25c23e72a">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+GPAYBalanceEnquiryResponse:{
+
+DateTimeStamp: now(),
+Device: "Android 7.1",
+
+GPAYBEResponseMessage: flatten(payload.GPAYBalanceEnquiryResponse.GPAYBEoneResponseMessage.GPAYBEResponseMessage)}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+				<ee:transform doc:name="Transform Message" doc:id="568f1665-40b9-43b3-a64f-2263c7d6dcab" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+GPAYBalanceEnquiryResponse:{
+DateTimeStamp: payload.GPAYBalanceEnquiryResponse.DateTimeStamp,
+Device: payload.GPAYBalanceEnquiryResponse.Device,
+sumofallbanks: sum(payload.GPAYBalanceEnquiryResponse.GPAYBEResponseMessage.TotalBal),
+
+GPAYBalanceEnquiryResponse: payload.GPAYBalanceEnquiryResponse.GPAYBEResponseMessage
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</when>
+			<otherwise >
+				<flow-ref doc:name="p-process-development-implSub_Flow" doc:id="5119c244-e91e-4db7-b644-262924e4619c" name="p-process-development-implSub_Flow"/>
+			</otherwise>
+		</choice>
+		<logger level="INFO" doc:name="Logger" doc:id="9d25ec41-7d26-48cb-84dc-1bfac67d23e5" />
+	</sub-flow>
+	<sub-flow name="p-process-development-implSub_Flow" doc:id="013cdefd-be11-49da-a16a-98d40862800f" >
+		<ee:transform doc:name="Transform Message" doc:id="fac74ee0-d128-4437-8f7f-01d5070ecab0" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="9f330ca6-95fc-46c0-a531-47d214ac0b12" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="vBankcode" ><![CDATA[%dw 2.0
+output application/json
+---
+payload.GPAYBalanceEnquiryRequest.GPAYBankInfoMessage[0].GPAYBankInfoRequest.BankCode]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<choice doc:name="Choice" doc:id="292a24dc-30f9-432e-b28c-aab679adb134" >
+			<when expression='#[vars.vBankcode == "SBI"]'>
+				<flow-ref doc:name="p-process-development-implSub_Flow-sbi-bank" doc:id="c69b5751-7fcb-4523-9b85-7a8662689978" name="p-process-development-implSub_Flow-sbi-bank"/>
+			</when>
+			<when expression='#[vars.vBankcode == "UNIONBANK"]'>
+				<flow-ref doc:name="p-process-development-implSub_Flow-unionbank" doc:id="420830c3-6302-4b22-ab18-72ef23aa3e10" name="p-process-development-implSub_Flow-unionbank"/>
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Transform Message" doc:id="b4c5a984-57dd-408f-8545-1600a8017a9e" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    "GPAYBalanceEnquiryResponse": {
+        "GPAYReferenceNumber": null,
+        "DateTimeStamp": "",
+        "Device": "null",
+        "GPAYBEResponseMessage": [
+            {
+                "GPAYReceiptTime": "",
+                "GPAYSequenceNum": null,
+                "GPAYAccountNumber": "",
+                "GPAYAccountCurrency": null,
+                "GPAYAccountType": null,
+                "GPAYAccountStatusDesc": null,
+                "GPAYAvailableBalance": null,
+                "StatusCode": "FAILED",
+                "StatusDetail": "Requested Bank is not found",
+                "GPAYCustomerFullName": null
+            }
+        ]
+    }
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+	</sub-flow>
+	<sub-flow name="p-process-development-implSub_Flow-sbi-bank" doc:id="e9de0078-06d2-4506-8ef3-39abafbccf8c" >
+		<ee:transform doc:name="Transform Message" doc:id="d2013328-db2b-4511-a07b-66b6c341509f" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+getAccountBalanceReq: {
+
+
+    Header:{
+        AccountName: payload.GPAYBalanceEnquiryRequest.GPAYBankInfoMessage[0].GPAYBankInfoRequest.AccountName,
+        ReferenceNumber: payload.GPAYBalanceEnquiryRequest.GPAYReferenceNumber,
+
+    },
+    Body: {
+
+        AcctNums: [
+{
+    AccNum: payload.GPAYBalanceEnquiryRequest.GPAYBankInfoMessage[0].GPAYBankInfoRequest.AccountNumbers.AccountNumber[0].AccNumber default ""
+}
+        ]
+    }
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<http:request method="POST" doc:name="Request" doc:id="3cdd97a2-de3a-4aa4-acf1-ba35eb76e4d4" config-ref="HTTP_Request_configuration" path="/core/banking/account/balance">
+			<http:headers ><![CDATA[#[output application/java
+---
+{
+	"device_type" : "123456789",
+	"client_secret" : "1234567",
+	"client_operation" : "123456789",
+	"client_id" : "client_id"
+}]]]></http:headers>
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="3ee4888f-fb3c-480c-931c-7e8ebf1bb589" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"GPAYBalanceEnquiryResponse": {
+	
+		
+		"GPAYReferenceNumber": payload.getAccountBalanceRes.Header.ReferenceNumber,
+		"DateTimeStamp": now(),
+		"Device": "Android 7.1",
+		"GPAYBEResponseMessage": [{
+			"BankCode": "SBI",
+			"StatusCode": payload.getAccountBalanceRes.Header.Error_Cde default "",
+			"StatusDetail": payload.getAccountBalanceRes.Header.Error_Cde default "",
+            "TotalBal" : sum(payload.getAccountBalanceRes.Body.BalAmt.amountValue) default "0",
+			"GPAYBalanceEnquiryResponse":  if (payload.getAccountBalanceRes.Header.Error_Cde == "200")payload.getAccountBalanceRes.Body.BalAmt map{
+					"GPAYReceiptTime": now (),
+					"GPAYSequenceNum": $.SequenceNum,
+					"GPAYAccountNumber": "SA1111111111",
+					"GPAYAccountCurrency": $.currencyCode,
+					"GPAYAccountType": $.AccountType,
+					"GPAYAccountStatusDesc": $.StatusDetail,
+					"GPAYAvailableBalance":$.amountValue,
+				"StatusCode": $.Status ,
+			    "StatusDetail": $.StatusDetail ,
+					"GPAYCustomerFullName": "sai"
+				}
+                else [{
+					"GPAYReceiptTime": now(),
+					"GPAYSequenceNum": "",
+					"GPAYAccountNumber": "",
+					"GPAYAccountCurrency": "",
+					"GPAYAccountType": "",
+					"GPAYAccountStatusDesc": "",
+					"GPAYAvailableBalance": "",
+				"StatusCode": payload."statuscode ",
+			    "StatusDetail": payload.status,
+					"GPAYCustomerFullName": ""
+				}
+			]
+			
+		}]
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="c85fc848-1821-4512-94d5-5618b6a2c271" />
+	</sub-flow>
+	<sub-flow name="p-process-development-implSub_Flow-unionbank" doc:id="5a4ae79a-899f-4700-aa7f-d8b7cf8dcd34" >
+		<ee:transform doc:name="Transform Message" doc:id="3debb0e7-b129-48e3-b221-2d74f051b035" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"AccountBalanceRq": {
+		"AccountBalanceRqHeader": {
+			"AccountName": payload.GPAYBalanceEnquiryRequest.GPAYBankInfoMessage[0].GPAYBankInfoRequest.AccountName,
+			"ReferenceNumber": payload.GPAYBalanceEnquiryRequest.GPAYReferenceNumber
+		},
+		"AccountBalanceRqBody": {
+			"AccountNumber": payload.GPAYBalanceEnquiryRequest.GPAYBankInfoMessage[0].GPAYBankInfoRequest.AccountNumbers.AccountNumber[0].AccNumber
+		}
+	}
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<http:request method="POST" doc:name="Request" doc:id="e4bc7dfe-295e-4a76-b9f7-5f12e766542a" config-ref="HTTP_Request_configuration_Unionbank" path="/union/banking/account/balance">
+			<http:headers ><![CDATA[#[output application/java
+---
+{
+	"device_type" : "123456789",
+	"client_secret" : "1234567",
+	"client_operation" : "123456789",
+	"client_id" : "client_id"
+}]]]></http:headers>
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="0417422a-0643-41f7-8de9-847eb70056db" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"GPAYBalanceEnquiryResponse": {
+	
+		
+		"GPAYReferenceNumber": "",
+		"DateTimeStamp": "2018-03-14T08:00:00",
+		"Device": "Android 7.1",
+		"GPAYBEResponseMessage": [{
+			"BankCode": "UNIONBANK",
+			"StatusCode": "OK",
+			"StatusDetail": "OK",
+			"TotalBal":payload.AccountBalanceRs.Success.AccountBalance default "0",
+			"GPAYBalanceEnquiryResponse": if (payload.AccountBalanceRs.Success.AccountStatus == "Active") [{
+					"GPAYReceiptTime": now(),
+					"GPAYSequenceNum": 1,
+					"GPAYAccountNumber": payload.AccountBalanceRs.Success.AccountNumber,
+					"GPAYAccountCurrency": payload.AccountBalanceRs.Success.AccountCurrency,
+					"GPAYAccountType": "",
+					"GPAYAccountStatusDesc": payload.AccountBalanceRs.Success.AccountStatus,
+					"GPAYAvailableBalance": payload.AccountBalanceRs.Success.AccountBalance,
+				"StatusCode": payload.statuscode,
+			    "StatusDetail": payload.status,
+					"GPAYCustomerFullName": payload.AccountBalanceRs.Success.AccountName
+				}
+			] else [{
+					"GPAYReceiptTime": now(),
+					"GPAYSequenceNum": "",
+					"GPAYAccountNumber": "",
+					"GPAYAccountCurrency": "",
+					"GPAYAccountType": "",
+					"GPAYAccountStatusDesc": "",
+					"GPAYAvailableBalance": "",
+				"StatusCode": payload.statuscode,
+			    "StatusDetail": payload.status,
+					"GPAYCustomerFullName": ""
+				}
+			]
+		}]
+	}
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="7f48c93b-a4fc-4345-87c4-b62df312fd76" />
+	</sub-flow>
+</mule>

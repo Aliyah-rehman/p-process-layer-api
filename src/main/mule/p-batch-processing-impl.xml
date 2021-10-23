@@ -1,0 +1,327 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:batch="http://www.mulesoft.org/schema/mule/batch" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+	<file:config name="File_Config" doc:name="File Config" doc:id="d5826a6f-46b7-42e9-9a4e-79356556615a" >
+		<file:connection workingDir="F:\zclass\batchprocessing\usecase" />
+	</file:config>
+	<jms:config name="JMS_Config" doc:name="JMS Config" doc:id="73821489-02ea-4f57-a8db-3381e78adf32" >
+		<jms:active-mq-connection username="admin" password="admin">
+			<jms:factory-configuration brokerUrl="tcp://localhost:61616" />
+		</jms:active-mq-connection>
+	</jms:config>
+	<flow name="p-batch-processing-implFlow" doc:id="5dc7658b-66c5-4813-89e1-133e33df4678" >
+		<ee:transform doc:name="Transform Message" doc:id="a7e1ac7d-b495-44fa-88a3-2f0275a29493" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload.GPAYBalanceEnquiryRequest.GPAYBankInfoMessage[0].GPAYBankInfoRequest.AccountNumbers.AccountNumber map {
+
+
+    AccountBalanceRq:{
+
+        AccountBalanceRqHeader:{
+            AccountName: $.AccountName,
+            ReferenceNumber:payload.GPAYBalanceEnquiryRequest.GPAYReferenceNumber
+        },
+        AccountBalanceRqBody:{
+
+            AccountNumber: $.AccNumber
+        }
+    }
+
+
+
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<batch:job jobName="p-batch-processing-implBatch_Job" doc:id="99e83618-a925-408d-b1fc-01a086b90a70" maxFailedRecords="1">
+			<batch:process-records >
+				<batch:step name="Batch_Step" doc:id="9a535e77-9a19-47f0-ab37-e7ba71307dac" >
+					<ee:transform doc:name="Transform Message" doc:id="ebb61f07-ef68-491a-9ea8-78b048cacb8e" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<http:request method="POST" doc:name="Request" doc:id="2537151f-678d-4fdd-b16b-eafdfe847e26" config-ref="HTTP_Request_configuration_Unionbank" path="/union/banking/account/balance">
+						<http:headers><![CDATA[#[output application/java
+---
+{
+	"device_type" : "123456789",
+	"client_secret" : "1234567",
+	"client_operation" : "123456789",
+	"client_id" : "client_id"
+}]]]></http:headers>
+					</http:request>
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="7c8d2c11-ffac-4061-ac12-c0de5277b97e" size="100" preserveMimeTypes="true">
+						<ee:transform doc:name="Transform Message" doc:id="4cfac3ee-0ce9-42d0-b260-d0bbaa4c759b" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+						<ee:transform doc:name="Transform Message" doc:id="4378ca96-ed63-45e1-86ea-e5fd65a1b919" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+GPAYBalanceEnquiryResponse:{
+    "DateTimeStamp": now(),
+		"Device": "Android 7.1",
+"TotalBal":  sum(payload.AccountBalanceRs.Success.AccountBalance),
+    GPAYBEResponseMessage:[{
+
+GPAYBalanceEnquiryResponse: payload map{
+    	"BankCode": "UNIONBANK",
+
+"StatusCode": "OK",
+			"StatusDetail": "OK",
+
+    GPAYReceiptTime: now(),
+    GPAYSequenceNum: $$ + 1 ,
+    GPAYAccountNumber: $.AccountBalanceRs.Success.AccountNumber,
+    GPAYAccountCurrency: $.AccountBalanceRs.Success.AccountCurrency,
+    GPAYAccountbalance:$.AccountBalanceRs.Success.AccountBalance,
+    
+    GpayAccountName: $.AccountBalanceRs.Success.AccountName
+    
+}
+
+
+    }]
+}]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+						<jms:publish doc:name="Publish" doc:id="75d16de1-6b82-4aa0-a944-560f70cdbc61" config-ref="JMS_Config" destination="gpay">
+							<jms:message outboundContentType="application/json" />
+						</jms:publish>
+						<logger level="INFO" doc:name="Logger" doc:id="5791f212-b826-41fa-a83f-1b00a1d850bb" message="aftrer aggregator #[payload]"/>
+					</batch:aggregator>
+				</batch:step>
+				<batch:step name="Batch_Step1" doc:id="a916db89-21a5-4fdd-b3fa-5acec4c53b1c" acceptPolicy="ONLY_FAILURES">
+					<ee:transform doc:name="Transform Message" doc:id="4db50d63-edfc-4428-970c-8246f87915fa" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<file:write doc:name="Write" doc:id="c3210329-332c-4e8e-88be-5ecc79ff8d18" config-ref="File_Config" path="output.json"/>
+				</batch:step>
+			</batch:process-records>
+			<batch:on-complete >
+				<ee:transform doc:name="Transform Message" doc:id="9bb0661a-6eab-4acc-9944-17e1e7341d01" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	
+	batchID: payload.batchJobInstanceId,
+	totalrecords: payload.totalRecords,
+	failedRecords: payload.failedRecords,
+	successfulRecords: payload.successfulRecords
+}
+]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="5bdde1d8-7330-4ef0-b70b-ccaef145aebf" message="summary payloa #[payload]"/>
+			</batch:on-complete>
+		</batch:job>
+	</flow>
+	<flow name="p-batch-processing-implFlow1" doc:id="0fb54962-3ce6-49c8-bd38-cf8e05550886" >
+		<ee:transform doc:name="Transform Message" doc:id="9e1dc216-959c-446a-b66b-ab859e4b4032">
+				<ee:message>
+					<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload.GPAYBalanceEnquiryRequest.GPAYBankInfoMessage[0].GPAYBankInfoRequest.AccountNumbers.AccountNumber map {
+
+
+    AccountBalanceRq:{
+
+        AccountBalanceRqHeader:{
+            AccountName: $.AccountName,
+            ReferenceNumber:payload.GPAYBalanceEnquiryRequest.GPAYReferenceNumber
+        },
+        AccountBalanceRqBody:{
+
+            AccountNumber: $.AccNumber
+        }
+    }
+
+
+
+}]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+		<parallel-foreach doc:name="Parallel For Each" doc:id="98520171-2de3-4e4a-9d3f-f0cf2b9bf5f3" collection="#[payload]">
+			<ee:transform doc:name="Transform Message" doc:id="79f25270-f6fd-461e-9459-ae114ae370a0" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<try doc:name="Try" doc:id="32fe4f9f-aaaf-49ae-b0cb-3adb4a76e536" >
+				<http:request method="POST" doc:name="Request" doc:id="892b7fe7-d80e-4e2b-96f0-677d9547fe73" config-ref="HTTP_Request_configuration_Unionbank" path="/union/banking/account/balance">
+				<http:headers><![CDATA[#[output application/java
+---
+{
+	"device_type" : "123456789",
+	"client_secret" : "1234567",
+	"client_operation" : "123456789",
+	"client_id" : "client_id"
+}]]]></http:headers>
+			</http:request>
+				<error-handler >
+					<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="ca27ba25-dd28-441f-a3c0-7fb0907b9ecc" >
+						<ee:transform doc:name="Transform Message" doc:id="1583f4cd-a8c4-4c1b-8d27-5a92ad4a6aae" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[{
+    "AccountBalanceRs": {
+        "Success": {
+            "AccountNumber": "",
+            "AccountCurrency": "",
+            "AccountBalance": "0",
+            "AccountBankName": "ANDHRABANK",
+            "AccountName": "",
+            "AccountStatus": error.description
+        }
+    }
+}]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+					</on-error-continue>
+				</error-handler>
+			</try>
+		</parallel-foreach>
+		<ee:transform doc:name="Transform Message" doc:id="515fb2d9-7184-4324-88ba-df4bcfe19e3f" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+flatten(payload..payload)]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="4fcccba5-9d9d-4772-a2ca-235d3202e4c8" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+GPAYBalanceEnquiryResponse:{
+    "DateTimeStamp": now(),
+		"Device": "Android 7.1",
+"TotalBal":  sum(payload.AccountBalanceRs.Success.AccountBalance),
+    GPAYBEResponseMessage:[{
+
+GPAYBalanceEnquiryResponse: payload map{
+    	"BankCode": "UNIONBANK",
+
+"StatusCode": "OK",
+			"StatusDetail": "OK",
+
+    GPAYReceiptTime: now(),
+    GPAYSequenceNum: $$ + 1 ,
+    GPAYAccountNumber: $.AccountBalanceRs.Success.AccountNumber,
+    GPAYAccountCurrency: $.AccountBalanceRs.Success.AccountCurrency,
+    GPAYAccountbalance:$.AccountBalanceRs.Success.AccountBalance,
+    
+    GpayAccountName: $.AccountBalanceRs.Success.AccountName,
+    GpayStatus: $.AccountBalanceRs.Success.AccountStatus
+    
+}
+
+
+    }]
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="f97445d5-95fe-4c50-8a65-97c567460d66" />
+	</flow>
+	<flow name="p-batch-processing-implFlow2" doc:id="fedc5005-9487-4acc-ae62-b5c4efc649db" >
+		<ee:transform doc:name="Transform Message" doc:id="615aad5f-ae34-4989-8176-a2d6739b7be0" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload.GPAYBalanceEnquiryRequest.GPAYBankInfoMessage[0].GPAYBankInfoRequest.AccountNumbers.AccountNumber map {
+
+
+    AccountBalanceRq:{
+
+        AccountBalanceRqHeader:{
+            AccountName: $.AccountName,
+            ReferenceNumber:payload.GPAYBalanceEnquiryRequest.GPAYReferenceNumber
+        },
+        AccountBalanceRqBody:{
+
+            AccountNumber: $.AccNumber
+        }
+    }
+
+
+
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<foreach doc:name="For Each" doc:id="d2c98061-1cc0-4448-bc78-afd603b81701" collection="#[payload]">
+			<ee:transform doc:name="Transform Message" doc:id="320069e1-51e5-4621-a6b4-65de4d652fb3" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+
+output application/json
+---
+payload ]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<http:request method="POST" doc:name="Request" doc:id="b73ad0cb-8030-465c-87a5-ae63662f105b" config-ref="HTTP_Request_configuration_Unionbank" path="/union/banking/account/balance">
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"device_type" : "123456789",
+	"client_secret" : "1234567",
+	"client_operation" : "123456789",
+	"client_id" : "client_id"
+}]]]></http:headers>
+			</http:request>
+			<jms:publish doc:name="Publish" doc:id="2eb51790-214f-4088-a3c6-e9c8554d193e" config-ref="JMS_Config" destination="gpay">
+				<jms:message outboundContentType="application/json" />
+			</jms:publish>
+		</foreach>
+		<ee:transform doc:name="Transform Message" doc:id="863abe0e-1acd-4fad-93a7-11b67b8639de" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="b2f69b09-b1ad-4f35-81ac-2f36dd482d76" />
+	</flow>
+	<flow name="p-batch-processing-implFlow3" doc:id="d9d9245e-1134-4a66-a95e-6df1b887c1ca" >
+		<jms:consume doc:name="Consume" doc:id="2db43e29-add4-4ffb-afd7-e10e9401bf65" config-ref="JMS_Config" destination="gpay" contentType="application/json"/>
+		<ee:transform doc:name="Transform Message" doc:id="12410006-e37f-4585-8ec1-14616d598f7c" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>

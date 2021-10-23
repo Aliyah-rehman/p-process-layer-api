@@ -1,0 +1,27 @@
+{
+	"GPAYBalanceEnquiryResponse": {
+	
+		
+		"GPAYReferenceNumber": "1234567890",
+		"DateTimeStamp": "2018-03-14T08:00:00",
+		"Device": "Android 7.1",
+		"GPAYBEResponseMessage": [{
+			"BankCode": "UNIONBANK",
+			"StatusCode": "OK",
+			"StatusDetail": "OK",
+			"GPAYBalanceEnquiryResponse": [{
+					"GPAYReceiptTime": "12-04-2020T10:28:03",
+					"GPAYSequenceNum": 1,
+					"GPAYAccountNumber": "SA1111111111",
+					"GPAYAccountCurrency": "INR",
+					"GPAYAccountType": "ACTIVE",
+					"GPAYAccountStatusDesc": "ACTIVE",
+					"GPAYAvailableBalance": 78127.05,
+				"StatusCode": "OK",
+			    "StatusDetail": "OK",
+					"GPAYCustomerFullName": "saii"
+				}
+			]
+		}]
+	}
+}
